@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fif-ears: live demo</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         margin: 0; background: #101418; color: #e8ecef; }
+  main { max-width: 880px; margin: 0 auto; padding: 24px 18px 60px; }
+  h1 { font-size: 1.7rem; margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 28px 0 8px; }
+  p, li { line-height: 1.5; color: #c9d1d8; }
+  a { color: #7cc4ff; }
+  .card { background: #171d23; border: 1px solid #2a333d; border-radius: 10px;
+          padding: 16px 18px; margin: 16px 0; }
+  #status { font-family: ui-monospace, Menlo, Consolas, monospace;
+            color: #ffd97c; min-height: 1.4em; }
+  button { background: #1f6feb; color: #fff; border: 0; border-radius: 6px;
+           padding: 9px 18px; font-size: 1rem; cursor: pointer; }
+  button:disabled { background: #44506a; cursor: wait; }
+  button.secondary { background: #2a333d; }
+  input[type=file] { color: #e8ecef; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 10px; }
+  .metric { background: #10151a; border: 1px solid #2a333d; border-radius: 8px;
+            padding: 10px 12px; }
+  .metric .label { font-size: 0.8rem; text-transform: uppercase;
+                   letter-spacing: 0.05em; color: #8b98a5; }
+  .metric .value { font-size: 1.25rem; margin-top: 3px; color: #fff; }
+  pre { background: #0b0f13; border: 1px solid #2a333d; border-radius: 8px;
+        padding: 14px; white-space: pre-wrap; word-wrap: break-word;
+        font-size: 0.85rem; line-height: 1.45; max-height: 520px; overflow: auto; }
+  .hidden { display: none; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>fif-ears: live demo</h1>
+  <p>Audio perception for agents. fif-ears listens to an audio file as
+     measurement and translates what is in the sound into a structured
+     report (<code>report.json</code>) and a written narrative
+     (<code>report.md</code>) that any model or human can reason over.</p>
+
+  <div class="card">
+    <h2 style="margin-top:0">Try it</h2>
+    <p id="status">Loading the Python runtime (Pyodide)...</p>
+    <div class="row">
+      <input type="file" id="file" accept=".wav,.mp3,.m4a,.ogg,.flac,audio/*">
+      <button id="analyze" disabled>Analyze</button>
+    </div>
+    <p style="font-size:0.9rem">Supported input: wav, mp3, m4a, ogg, flac
+       (whatever your browser can decode). Analysis runs entirely on your
+       device. Your file never leaves it.</p>
+  </div>
+
+  <div id="results" class="hidden">
+    <h2>Headline</h2>
+    <div class="grid">
+      <div class="metric"><div class="label">Duration</div><div class="value" id="m-duration"></div></div>
+      <div class="metric"><div class="label">Tempo</div><div class="value" id="m-tempo"></div></div>
+      <div class="metric"><div class="label">Key</div><div class="value" id="m-key"></div></div>
+      <div class="metric"><div class="label">Dominant pitch</div><div class="value" id="m-pitch"></div></div>
+      <div class="metric"><div class="label">Sections</div><div class="value" id="m-sections"></div></div>
+      <div class="metric"><div class="label">Words layer</div><div class="value" id="m-words"></div></div>
+    </div>
+    <p id="meta" style="font-size:0.9rem"></p>
+    <div class="row">
+      <button class="secondary" id="dl-json">Download report.json</button>
+      <button class="secondary" id="dl-md">Download report.md</button>
+    </div>
+    <h2>Full report (report.md)</h2>
+    <pre id="report-md"></pre>
+  </div>
+
+  <h2>How this demo works</h2>
+  <p>This page runs the real fif-ears Python package, version 0.1.0, in
+     your browser through Pyodide (Python compiled to WebAssembly) with
+     numpy and scipy. No analysis code was rewritten in JavaScript. The
+     package files are vendored under <code>ears/</code> next to this
+     page, byte-identical to the shipped package (see
+     <a href="VENDORED.md">VENDORED.md</a>).</p>
+  <p>One step differs from the command line tool, and it is only the
+     decoder: your browser decodes the audio with the Web Audio API,
+     where the command line tool uses ffmpeg. The decoded samples are
+     handed to the package, and every analysis step after decoding is
+     the shipped package itself.</p>
+
+  <h2>The seven layers</h2>
+  <ul>
+    <li><strong>signal</strong>: duration, levels, clipping, spectral summary, stereo width.</li>
+    <li><strong>rhythm</strong>: onsets, tempo with auditable metrical levels, beat grid.</li>
+    <li><strong>structure</strong>: section boundaries from a novelty analysis.</li>
+    <li><strong>harmony</strong>: pitch track, key estimate, per-segment chords with honest nulls.</li>
+    <li><strong>words</strong>: speech transcription when a local Whisper engine is installed. In this browser demo it reports <code>not_installed</code>, the same honest result the command line tool gives on a machine without Whisper.</li>
+    <li><strong>events</strong>: non-music sound segmentation (silence, speech-like, music-like, noise-like).</li>
+    <li><strong>expression</strong>: dynamics contour, groove in milliseconds, timbre proxies, harmonic tension.</li>
+  </ul>
+
+  <p>Source code, documentation, and the report schema:
+     <a href="https://github.com/Frozen-In-Flames/fif-ears">github.com/Frozen-In-Flames/fif-ears</a></p>
+</main>
+
+<script>
+"use strict";
+const PYODIDE_BASE = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/";
+const PKG_FILES = [
+  "ears/__init__.py", "ears/__main__.py", "ears/audio.py", "ears/cli.py",
+  "ears/dsp.py", "ears/report.py",
+  "ears/layers/__init__.py", "ears/layers/events.py",
+  "ears/layers/expression.py", "ears/layers/harmony.py",
+  "ears/layers/rhythm.py", "ears/layers/signal.py",
+  "ears/layers/structure.py", "ears/layers/words.py"
+];
+
+const SHIM = `
+import sys
+sys.path.insert(0, "/pkg")
+import numpy as np
+import ears.audio
+import ears.report
+from ears.audio import AudioData
+
+_prebuilt = {}
+
+def _stand_in_load_audio(path):
+    return _prebuilt["audio"]
+
+# report.py imported load_audio by name (from .audio import load_audio),
+# so both bindings are pointed at the stand-in. The package itself is
+# not modified; this is a runtime substitution of the decode step only.
+ears.audio.load_audio = _stand_in_load_audio
+ears.report.load_audio = _stand_in_load_audio
+
+def _np_from_js(arr):
+    try:
+        out = np.asarray(arr, dtype=np.float32)
+        if out.dtype != np.float32:
+            out = out.astype(np.float32)
+        return np.ascontiguousarray(out)
+    except Exception:
+        return np.ascontiguousarray(np.array(arr.to_py(), dtype=np.float32))
+
+def run_browser_analysis(filename, sample_rate, channels, ch0, ch1):
+    left = _np_from_js(ch0)
+    if int(channels) >= 2 and ch1 is not None:
+        right = _np_from_js(ch1)
+        n = min(len(left), len(right))
+        left, right = left[:n], right[:n]
+        chan = 2
+    else:
+        right = left.copy()
+        chan = 1
+    # Same mono construction as ears.audio.load_audio.
+    mono = (left.astype(np.float64) + right.astype(np.float64)) * 0.5
+    mono = mono.astype(np.float32)
+    audio = AudioData(mono=mono, left=left, right=right,
+                      sample_rate=int(sample_rate), channels=chan,
+                      duration=len(mono) / int(sample_rate))
+    _prebuilt["audio"] = audio
+    ears.report.analyze_file(filename, "/out")
+    with open("/out/report.json") as fh:
+        json_text = fh.read()
+    with open("/out/report.md") as fh:
+        md_text = fh.read()
+    # Return only the file texts. The page parses report.json itself, so
+    # the values it displays are exactly the bytes the tool wrote,
+    # including real JSON nulls for layers that found nothing.
+    return {"json": json_text, "md": md_text}
+`;
+
+const statusEl = document.getElementById("status");
+const analyzeBtn = document.getElementById("analyze");
+const fileInput = document.getElementById("file");
+let pyodide = null;
+let lastJson = null, lastMd = null;
+
+function setStatus(msg) { statusEl.textContent = msg; }
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("failed to load " + src));
+    document.head.appendChild(s);
+  });
+}
+
+function ensureDirFor(path) {
+  const parts = path.split("/").slice(0, -1);
+  let cur = "";
+  for (const p of parts) {
+    if (!p) { cur = ""; continue; }
+    cur += "/" + p;
+    try { pyodide.FS.mkdir(cur); } catch (e) { /* already exists */ }
+  }
+}
+
+async function initPython() {
+  try {
+    setStatus("Loading the Python runtime (Pyodide)...");
+    await loadScript(PYODIDE_BASE + "pyodide.js");
+    pyodide = await loadPyodide({ indexURL: PYODIDE_BASE });
+    setStatus("Loading numpy and scipy...");
+    await pyodide.loadPackage(["numpy", "scipy"]);
+    setStatus("Loading the fif-ears package...");
+    for (const f of PKG_FILES) {
+      const resp = await fetch(f);
+      if (!resp.ok) throw new Error("could not fetch package file " + f);
+      const text = await resp.text();
+      const path = "/pkg/" + f;
+      ensureDirFor(path);
+      pyodide.FS.writeFile(path, text);
+    }
+    pyodide.runPython(SHIM);
+    analyzeBtn.disabled = false;
+    setStatus("Ready. Choose an audio file and press Analyze.");
+  } catch (e) {
+    setStatus("Setup failed: " + (e && e.message ? e.message : e));
+  }
+}
+
+function noneText(v) { return (v === null || v === undefined) ? "none detected" : v; }
+
+async function analyze() {
+  const file = fileInput.files[0];
+  if (!file) { setStatus("Choose an audio file first."); return; }
+  if (!pyodide) { setStatus("The Python runtime is still loading."); return; }
+  analyzeBtn.disabled = true;
+  document.getElementById("results").classList.add("hidden");
+  try {
+    setStatus("Decoding audio in your browser...");
+    const ab = await file.arrayBuffer();
+    const actx = new OfflineAudioContext(2, 1, 44100);
+    const buffer = await actx.decodeAudioData(ab);
+    const nch = buffer.numberOfChannels;
+    const ch0 = buffer.getChannelData(0);
+    const ch1 = nch >= 2 ? buffer.getChannelData(1) : null;
+    pyodide.globals.set("js_filename", file.name);
+    pyodide.globals.set("js_sr", buffer.sampleRate);
+    pyodide.globals.set("js_channels", nch);
+    pyodide.globals.set("js_ch0", ch0);
+    pyodide.globals.set("js_ch1", ch1);
+    setStatus("Analyzing with the fif-ears package. In-browser analysis is slower than the command line tool; a full song can take a minute or more. The page will look frozen while Python runs.");
+    await new Promise(r => setTimeout(r, 60));
+    const t0 = performance.now();
+    const result = pyodide.runPython(
+      "run_browser_analysis(js_filename, js_sr, js_channels, js_ch0, js_ch1)");
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    const out = result.toJs({ dict_converter: Object.fromEntries });
+    const reportObj = JSON.parse(out.json);
+    const s = reportObj.summary;
+    document.getElementById("m-duration").textContent = s.duration_s + " s";
+    document.getElementById("m-tempo").textContent =
+      (s.tempo_bpm === null || s.tempo_bpm === undefined)
+        ? "none detected" : s.tempo_bpm + " BPM";
+    document.getElementById("m-key").textContent = noneText(s.key);
+    const dp = reportObj.layers.harmony.dominant_pitch;
+    document.getElementById("m-pitch").textContent =
+      dp ? dp.note + " (" + dp.freq + " Hz)" : "none detected";
+    document.getElementById("m-sections").textContent = s.sections;
+    document.getElementById("m-words").textContent = s.words_status;
+    document.getElementById("meta").textContent =
+      "File: " + file.name + ". Analysis took " + secs +
+      " seconds in your browser.";
+    document.getElementById("report-md").textContent = out.md;
+    lastJson = out.json;
+    lastMd = out.md;
+    document.getElementById("results").classList.remove("hidden");
+    setStatus("Done.");
+  } catch (e) {
+    setStatus("Error: " + (e && e.message ? e.message : e));
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+}
+
+function download(name, text) {
+  const blob = new Blob([text], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+analyzeBtn.addEventListener("click", analyze);
+document.getElementById("dl-json").addEventListener("click",
+  () => { if (lastJson) download("report.json", lastJson); });
+document.getElementById("dl-md").addEventListener("click",
+  () => { if (lastMd) download("report.md", lastMd); });
+
+initPython();
+</script>
+</body>
+</html>
