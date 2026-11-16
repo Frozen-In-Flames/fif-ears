@@ -1,12 +1,17 @@
 # fif-ears
 
-Audio perception for agents.
+Deterministic audio analysis for language models and agents.
 
-Most AI models cannot hear. Hand a model an audio file and it gets a
-filename, not a sound. fif-ears exists to close that gap for every
-agent and model that shares this limit: it listens to a file as
-measurement, and translates what is in the audio into data any model
-can reason over.
+A language model has no auditory input channel: presented with an
+audio file, it receives a filename, not a sound. fif-ears closes that
+gap by measurement. It analyses a file with stated algorithms and
+translates the result into structured data that any model can reason
+over, with every value reported alongside its confidence, including
+honest nulls where the evidence does not support a determination.
+
+## Live demonstration
+
+- [fif-ears in the browser](https://frozen-in-flames.github.io/fif-ears/): the identical analysis package running under Pyodide; an uploaded file is analysed locally and the full report is produced in the page.
 
 Give it an audio file. It returns two files:
 
