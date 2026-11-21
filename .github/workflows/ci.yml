@@ -1,0 +1,24 @@
+# CI for fif-ears.
+# Test command from README.md, "Tests and verification":
+#   python -m unittest discover -s tests -v
+# Dependencies from pyproject.toml (numpy, scipy), installed via the
+# package itself. Added under the November 2026 audit follow-through:
+# the suite existed and passed locally but had no CI.
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: pip install -e .
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
