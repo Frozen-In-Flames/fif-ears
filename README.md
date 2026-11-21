@@ -54,6 +54,21 @@ Without installing:
 python -m ears analyze path/to/audio.wav --out path/to/report-dir
 ```
 
+## Role in a fif-smf-1 bundle
+
+Frozen In Flames tools exchange music as fif-smf-1 bundles: a
+Standard MIDI File (format 1, PPQ 480, conductor track named "Tempo")
+plus a `sidecar.json` manifest. The manifest has an `ears_report`
+member, and that member is a fif-ears `report.json` run on the
+bundle audio. A consumer reads `summary.tempo_bpm` and `summary.key`
+for the headline, then the per-layer results under `layers`, checking
+each layer's `status` first: a layer that cannot run reports its real
+status and nulls its fields, and the sidecar records `ears_report` as
+null when no report was run. The field contract is SCHEMA.md, and
+`tests/test_contract_report.py` validates a report produced from the
+bundled fixture in `tests/fixtures/` against exactly the fields the
+sidecar relies on, including the null shape.
+
 ## Layers
 
 | Layer | What it measures | Status |
